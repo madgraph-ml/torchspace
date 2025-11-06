@@ -2,21 +2,29 @@
 Bases on the mappings described in
 https://freidok.uni-freiburg.de/data/154629"""
 
+from typing import Optional
+
 import torch
-from torch import sqrt, atan2
+from torch import Tensor, atan2, sqrt
 
 from .base import PhaseSpaceMapping, TensorList
 from .functional.kinematics import (
-    inv_rotate_zy,
-    rotate_zy,
     boost,
-    mass,
-    lsquare,
     edot,
+    inv_rotate_zy,
+    lsquare,
+    mass,
     pi,
+    rotate_zy,
 )
 from .functional.ps_utils import three_particle_density
-from .invariants import UniformInvariantBlock
+from .functional.tchannel import costheta_to_invt, gen_mom_from_t_and_phi_com, tminmax
+from .invariants import (
+    BreitWignerInvariantBlock,
+    MasslessInvariantBlock,
+    StableInvariantBlock,
+    UniformInvariantBlock,
+)
 
 
 class ThreeBodyDecayCOM(PhaseSpaceMapping):
@@ -37,7 +45,7 @@ class ThreeBodyDecayCOM(PhaseSpaceMapping):
         self.e1_map = UniformInvariantBlock()
         self.e2_map = UniformInvariantBlock()
 
-    def map(self, inputs: TensorList, condition: TensorList):
+    def map(self, inputs: TensorList, condition=None):
         """Map from random numbers to momenta
 
         Args:
@@ -74,12 +82,12 @@ class ThreeBodyDecayCOM(PhaseSpaceMapping):
         E1a = sqrt(s) / 2 + (m1sq - (m2 + m3) ** 2) / (2 * sqrt(s))
         (p10,), p1_det = self.e1_map.map([r[:, 0]], [m1, E1a])
 
-        # Define the energy p10
+        # Define the energy p20
         Delta = 2 * sqrt(s) * (sqrt(s) / 2 - p10) + m1sq
         Delta_23 = m2sq - m3sq
         dE2 = (p10**2 - m1sq) * ((Delta + Delta_23) ** 2 - 4 * m2sq * Delta)
         E2a = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
-        E2b = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) - sqrt(dE2))
+        E2b = 1 / (2 * Delta) * ((sqrt(s) - p10) * (Delta + Delta_23) + sqrt(dE2))
         (p20,), p2_det = self.e2_map.map([r[:, 1]], [E2a, E2b])
 
         # Define angles
@@ -117,7 +125,7 @@ class ThreeBodyDecayCOM(PhaseSpaceMapping):
 
         return (p_decay,), gs
 
-    def map_inverse(self, inputs: TensorList, condition: TensorList):
+    def map_inverse(self, inputs: TensorList, condition=None):
         """Inverse map from decay momenta onto random numbers
 
         Args:
@@ -366,6 +374,159 @@ class ThreeBodyDecayLAB(PhaseSpaceMapping):
         r = torch.stack([r_p1, r_p2, r_phi, r_theta, r_beta], dim=1)
 
         return (r, s, m_out), gs
+
+    def density(self, inputs: TensorList, condition=None, inverse=False):
+        """Returns the density only of the mapping"""
+        if inverse:
+            _, density = self.map_inverse(inputs, condition)
+            return density
+        _, density = self.map(inputs, condition)
+        return density
+
+
+class TwoToThreeScatteringLAB(PhaseSpaceMapping):
+    """
+    Implement 2->3 scattering, based on the mapping described in
+        [1] E.~Byckling and K.~Kajantie,
+        ``Reductions of the phase-space integral in terms of simpler processes,''
+        Phys. Rev. 187 (1969), doi:10.1103/PhysRev.187.2008.
+
+    This is expressed in the LAB-frame and thus requires the input momenta
+    in the lab frame and the masses (or virtual ones) to construct the final decay momenta.
+    Parametrizes the 2->3 kinematics via the Mandelstam t and an azimuthal angle phi.
+    """
+
+    def __init__(
+        self,
+        mt: Optional[Tensor] = None,
+        wt: Optional[Tensor] = None,
+        nu_s: float = 1.4,
+        nu_t: float = 1.4,
+        flat: bool = False,
+    ):
+        dims_in = [(2,), (2,)]
+        dims_out = [(2, 4)]
+        dims_c = [(2, 4)]
+        super().__init__(dims_in, dims_out, dims_c)
+
+        # Define which t-mapping is used
+        # MadGraph only uses flat mappings for t!
+        if flat:
+            self.t_map = UniformInvariantBlock()
+        elif mt is None:
+            self.t_map = MasslessInvariantBlock(nu=nu)
+        elif wt is None:
+            self.t_map = StableInvariantBlock(mass=mt, nu=nu)
+        else:
+            self.t_map = BreitWignerInvariantBlock(mass=mt, width=wt)
+
+    def map(self, inputs: TensorList, condition=None):
+        """Map from random numbers to momenta
+
+        Args:
+            inputs: list of two tensors [r, m_out]
+                r: random numbers with shape=(b,2)
+                m_out: (virtual) masses of outgoing particles
+                    with shape=(b,2)
+            condition: list with single tensor [p_in]
+                p_in: incoming momenta with shape=(b,2,4)
+
+        Returns:
+            p_decay (Tensor): decay momenta (lab frame) with shape=(b,2,4)
+            det (Tensor): log det of mapping with shape=(b,)
+        """
+        r, m_out = inputs[0], inputs[1]
+        p_in = condition[0]
+
+        # Extract random numbers, input momenta and output masses
+        r1, r2 = r[:, 0], r[:, 1]
+        ptot = p_in.sum(dim=1)
+        p1 = p_in[:, 0]
+        p2 = p_in[:, 1]
+        p1_com = boost(p1, ptot, inverse=True)
+        p2_com = boost(p2, ptot, inverse=True)
+
+        # get invariants and incoming virtualities
+        p1_2 = lsquare(p1)
+        p2_2 = lsquare(p2)
+        s = lsquare(ptot)
+
+        # Define outgoing momenta and extract their masses/virtualities
+        k1 = torch.zeros(r.shape[0], 4, device=r.device)
+        m1 = m_out[:, 0]
+        m2 = m_out[:, 1]
+
+        # Get phi angle
+        phi = 2 * r1 * pi - pi
+        det_phi = 2 * pi
+
+        # get t_min and max
+        tmin, tmax = tminmax(s, p1_2, p2_2, m1, m2)
+        (t,), det_t = self.t_map.map([r2], condition=[-tmax, -tmin])
+
+        # get the density and decay momenta
+        k1_com, det_two_particle_inv = gen_mom_from_t_and_phi_com(
+            p1_com, p2_com, t, phi, m1, m2
+        )
+        k1 = boost(k1_com, ptot)
+        k2 = ptot - k1
+
+        # get the density and outputs
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2)
+        p_out = torch.stack([k1, k2], dim=1)
+
+        return (p_out,), det_t * det_two_particle_inv * det_phi
+
+    def map_inverse(self, inputs: TensorList, condition=None):
+        p_out = inputs[0]
+        p_in = condition[0]
+
+        # Extraxt incoming momenta
+        ptot = p_in.sum(dim=1)
+        p1 = p_in[:, 0]
+        p2 = p_in[:, 1]
+        p1_2 = lsquare(p1)
+        p2_2 = lsquare(p2)
+        s = lsquare(ptot)
+        p1_com = boost(p1, ptot, inverse=True)
+
+        # Get angles of incoming momenta
+        p1mag = pmag(p1_com)
+        phi1 = atan2(p1_com[:, 2], p1_com[:, 1])
+        costheta1 = p1_com[:, 3] / p1mag.clip(min=EPS)
+
+        # Get outgoing momenta
+        k1 = p_out[:, 0]
+        k2 = p_out[:, 1]
+
+        # get invariants and outgoing masses
+        m1 = mass(k1)
+        m2 = mass(k2)
+        m_out = torch.stack([m1, m2], dim=1)
+
+        # boost inverse, rotate back
+        # and then extract phi and theta
+        k1 = boost(k1, ptot, inverse=True)
+        k1 = inv_rotate_zy(k1, phi1, costheta1)
+        k1mag = pmag(k1)
+        costheta = k1[:, 3] / k1mag.clip(min=EPS)
+        phi = atan2(k1[:, 2], k1[:, 1])
+
+        # Map from cos_theta to t
+        tmin, tmax = tminmax(s, p1_2, p2_2, m1, m2)
+        t = costheta_to_invt(s, p1_2, p2_2, m1, m2, costheta)
+
+        # Get the random numbers
+        r1 = phi / 2 / pi + 0.5
+        det_phi_inv = 1 / (2 * pi)
+        (r2,), det_t_inv = self.t_map.map_inverse([-t], condition=[-tmax, -tmin])
+        r = torch.stack([r1, r2], dim=1)
+
+        # get the density and output momenta
+        det_two_particle_inv = tinv_two_particle_density(s, p1_2, p2_2)
+        p_in = torch.stack([p1, p2], dim=1)
+
+        return (r, m_out), det_t_inv / det_two_particle_inv * det_phi_inv
 
     def density(self, inputs: TensorList, condition=None, inverse=False):
         """Returns the density only of the mapping"""

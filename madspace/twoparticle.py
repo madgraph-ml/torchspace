@@ -435,7 +435,7 @@ class TwoToTwoScatteringLAB(PhaseSpaceMapping):
         self,
         mt: Optional[Tensor] = None,
         wt: Optional[Tensor] = None,
-        nu: float = 1.4,
+        nu: float = 0.8,
         flat: bool = False,
     ):
         dims_in = [(2,), (2,)]
