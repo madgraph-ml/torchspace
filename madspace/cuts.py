@@ -39,11 +39,11 @@ class PhaseSpaceCuts(nn.Module):
         pid_tensor = torch.tensor(pids)
 
         # get ids of common particles
-        jet_ids         = torch.argwhere(pid_tensor == 100)[:, 0]
-        b_ids           = torch.argwhere(pid_tensor == 101)[:, 0]
-        lepton_ids      = torch.argwhere(pid_tensor == 102)[:, 0]
-        photon_ids      = torch.argwhere(pid_tensor == 103)[:, 0]
-        invisible_ids   = torch.argwhere(pid_tensor == 104)[:, 0]
+        jet_ids = torch.argwhere(pid_tensor == 100)[:, 0]
+        b_ids = torch.argwhere(pid_tensor == 101)[:, 0]
+        lepton_ids = torch.argwhere(pid_tensor == 102)[:, 0]
+        photon_ids = torch.argwhere(pid_tensor == 103)[:, 0]
+        invisible_ids = torch.argwhere(pid_tensor == 104)[:, 0]
 
         # Get ids for 2-pair combinatorics
         jj_tri_id = torch.triu_indices(len(jet_ids), len(jet_ids), 1)
@@ -85,44 +85,10 @@ class PhaseSpaceCuts(nn.Module):
         }
 
     def cut(self, p: torch.Tensor) -> torch.Tensor:
-        """
-        Apply cuts to a batch of momenta.
-        Args:
-            p (torch.Tensor): Tensor of shape (B, N, 4)
-            
-            If N > self.nparticles, cuts are applied in a way such that the event
-            is accepted if any subset self.nparticles of N passes the cuts
-        Returns:
-            torch.Tensor: Mask tensor of shape (B,) with True for events passing the cuts
-        """
-        B, N, _ = p.shape
-        n = self.nparticles
-        assert _ == 4, "Expected last dimension to be 4 (4-momenta)"
-        if N == n:
-            return self._cut_fixed_n(p)
-        elif N > n:
-            # Now we apply cuts to all subsets of size n in N.
-            # Final mask is a logical OR over all subsets
-            idx = torch.arange(N)
-            combs = torch.combinations(idx, r=n) # get all combinations of n particles from N
-            keep_any = torch.zeros(B, dtype=torch.bool, device=p.device)
-            for comb in combs:
-                p_subset = p[:, comb, :]
-                keep_any |= self._cut_fixed_n(p_subset)
-                if bool(keep_any.all()):
-                    break
-            return keep_any
-        else:
-            raise ValueError(f"Cannot apply cuts: got {N} particles, expected at least {n}")
-        
-    def _cut_fixed_n(self, p: torch.Tensor) -> torch.Tensor:
-        """
-        Apply cuts to p. Here p is guaranteed to have shape (B, self.nparticles, 4)
-        Args:
-            p (torch.Tensor): Tensor of shape (B, self.nparticles, 4)
-        Returns:
-            torch.Tensor: Mask tensor of shape (B,) with True for events passing the cuts
-        """
+        B, N, k = p.shape
+        assert k == 4, "Expected last dimension to be 4 (4-momenta)"
+        assert N == self.nparticles, f"Expected {self.nparticles} particles, got {N}"
+
         # Start with all momenta
         mask = torch.ones(p.shape[0], device=p.device).bool()
 
@@ -162,7 +128,6 @@ class PhaseSpaceCuts(nn.Module):
                 invalid_mm = obs.minv(p[:, ids[0]], p[:, ids[1]]) < value
                 mask_mm = torch.any(invalid_mm, dim=1)
                 mask *= ~mask_mm
-
         return mask
 
     def forward(self, inputs: Tensor, **kwargs) -> Tensor:
