@@ -32,6 +32,7 @@ class PhaseSpaceCuts(nn.Module):
 
         if len(pids) != nparticles:
             raise ValueError(f"Expected {nparticles} pids, got {len(pids)}")
+        self.nparticles = nparticles
 
         # Do some pid arithmetic to get ids
         pids = [self.pid_to_inttype(pid) for pid in pids]
@@ -42,7 +43,7 @@ class PhaseSpaceCuts(nn.Module):
         b_ids = torch.argwhere(pid_tensor == 101)[:, 0]
         lepton_ids = torch.argwhere(pid_tensor == 102)[:, 0]
         photon_ids = torch.argwhere(pid_tensor == 103)[:, 0]
-        invisible_ids = torch.argwhere(pid_tensor == 103)[:, 0]
+        invisible_ids = torch.argwhere(pid_tensor == 104)[:, 0]
 
         # Get ids for 2-pair combinatorics
         jj_tri_id = torch.triu_indices(len(jet_ids), len(jet_ids), 1)
@@ -75,7 +76,7 @@ class PhaseSpaceCuts(nn.Module):
             "bquarks": b_ids,
             "photon": photon_ids,
             "lepton": lepton_ids,
-            "invisble": invisible_ids,
+            "invisible": invisible_ids,
             "jj": jj_ids,
             "bb": bb_ids,
             "aa": aa_ids,
@@ -84,6 +85,10 @@ class PhaseSpaceCuts(nn.Module):
         }
 
     def cut(self, p: torch.Tensor) -> torch.Tensor:
+        B, N, k = p.shape
+        assert k == 4, "Expected last dimension to be 4 (4-momenta)"
+        assert N == self.nparticles, f"Expected {self.nparticles} particles, got {N}"
+
         # Start with all momenta
         mask = torch.ones(p.shape[0], device=p.device).bool()
 
@@ -123,7 +128,6 @@ class PhaseSpaceCuts(nn.Module):
                 invalid_mm = obs.minv(p[:, ids[0]], p[:, ids[1]]) < value
                 mask_mm = torch.any(invalid_mm, dim=1)
                 mask *= ~mask_mm
-
         return mask
 
     def forward(self, inputs: Tensor, **kwargs) -> Tensor:
