@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/_static/todo" width="250", alt="MadNIS">
+  <img src="docs/_static/logo-light.png" width="300", alt="TorchSpace">
 </p>
 
 <h3 align="center">Differentiable and GPU ready phase-space mappings</h3>
