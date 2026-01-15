@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "madspace"
-version = "0.3.0"
+name = "torchspace"
+version = "1.0.0"
 authors = [
   { name="Ramon Winterhalder", email="ramon.winterhalder@unimi.it" },
   { name="Theo Heimel", email="theo.heimel@uclouvain.be" },
@@ -39,5 +39,5 @@ atomic = true
 line_length = 88
 
 [project.urls]
-Homepage = "https://github.com/madgraph-ml/madspace"
-Issues = "https://github.com/madgraph-ml/madspace/issues"
+Homepage = "https://github.com/madgraph-ml/torchspace"
+Issues = "https://github.com/madgraph-ml/torchspace/issues"

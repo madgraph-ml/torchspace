@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 
-from madspace.functional.ps_utils import build_p_in
-from madspace.invariants import BreitWignerInvariantBlock, UniformInvariantBlock
-from madspace.spline_mapping import SplineMapping
-from madspace.twoparticle import TwoBodyDecayCOM, TwoToTwoScatteringCOM
+from torchspace.functional.ps_utils import build_p_in
+from torchspace.invariants import BreitWignerInvariantBlock, UniformInvariantBlock
+from torchspace.spline_mapping import SplineMapping
+from torchspace.twoparticle import TwoBodyDecayCOM, TwoToTwoScatteringCOM
 
 torch.set_default_dtype(torch.float64)
 

@@ -1,7 +1,7 @@
 import torch
 
 torch.set_default_dtype(torch.float64)
-from madspace.single_channel import Diagramm_llvvA, Diagramm_ww_llvv
+from torchspace.single_channel import Diagramm_llvvA, Diagramm_ww_llvv
 
 MW = torch.tensor(80.377)
 WW = torch.tensor(2.085)

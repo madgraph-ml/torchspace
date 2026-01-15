@@ -1,5 +1,5 @@
-from madspace.rambo import Mahambo
-from madspace.cuts import PhaseSpaceCuts
+from torchspace.rambo import Mahambo
+from torchspace.cuts import PhaseSpaceCuts
 import torch
 import yaml
 

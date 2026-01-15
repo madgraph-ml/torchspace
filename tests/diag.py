@@ -1,5 +1,5 @@
-from madspace.diagram_mapping import *
-from madspace.single_channel import (
+from torchspace.diagram_mapping import *
+from torchspace.single_channel import (
     Diagramm_llvvA,
     Diagramm_ww_llvv,
     SingleChannelVBS,

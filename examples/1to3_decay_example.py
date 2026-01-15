@@ -1,4 +1,4 @@
-from madspace.threeparticle import ThreeBodyDecayCOM
+from torchspace.threeparticle import ThreeBodyDecayCOM
 import torch
 from pytest import approx
 
