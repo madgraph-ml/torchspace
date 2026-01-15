@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/_static/logo-light.png" width="250", alt="MadNIS">
+  <img src="docs/_static/todo" width="250", alt="MadNIS">
 </p>
 
 <h3 align="center">Differentiable and GPU ready phase-space mappings</h3>
@@ -14,7 +14,7 @@ This repository contains a refactored version of the code used in our publicatio
 
 ## Supported mappings
 
-**MadSpace** contains and supports a selection of different phase-space mappings which are useful for collider physics:
+**TorchSpace** contains and supports a selection of different phase-space mappings which are useful for collider physics:
 - Chili [https://arxiv.org/abs/2302.10449]
 - Rambo [Comput. Phys. Commun. 40 (1986) 359-373]
 - Rambo on diet [https://arxiv.org/abs/1308.2922]
@@ -28,9 +28,9 @@ This repository contains a refactored version of the code used in our publicatio
 
 ```sh
 # clone the repository
-git clone https://github.com/madgraph-ml/madspace.git
+git clone https://github.com/madgraph-ml/torchspace.git
 # then simply install (editable if needed with flag "-e")
-cd madspace
+cd torchspace
 pip install .
 ```
 
